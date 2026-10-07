@@ -143,11 +143,109 @@ function bandFor(score) {
   return "LOW";
 }
 
+// dangerous permission combos — the whole is worse than the parts
+const PERM_COMBOS = [
+  {
+    code: "COMBO_TRAFFIC_INTERCEPT",
+    score: 30,
+    detail: "tabs/history/cookies + webRequestBlocking + broad host access — can silently read and rewrite all browsing traffic",
+    needs: { any: [["tabs", "history", "cookies"]], all: ["webRequestBlocking"], hosts: "broad" },
+  },
+  {
+    code: "COMBO_DATA_EXFIL",
+    score: 25,
+    detail: "cookies/history + broad host access — can siphon sessions and history off to anywhere",
+    needs: { any: [["cookies", "history"]], hosts: "broad" },
+  },
+  {
+    code: "COMBO_TAB_HIJACK",
+    score: 20,
+    detail: "debugger/management + broad host access — full remote control over tabs or other extensions",
+    needs: { any: [["debugger", "management"]], hosts: "broad" },
+  },
+];
+
+function isBroadHost(h) {
+  if (h === "<all_urls>") return true;
+  const hostPart = h.replace(/^[a-z*]+:\/\//i, "").split("/")[0];
+  return hostPart === "*" || hostPart === "*.*" || hostPart.startsWith("*.");
+}
+
+function checkPermissionCombos(named = [], hosts = []) {
+  const out = [];
+  const broad = (hosts || []).some(isBroadHost);
+  for (const combo of PERM_COMBOS) {
+    const anyOk = !combo.needs.any || combo.needs.any.every((group) => group.some((p) => named.includes(p)));
+    const allOk = !combo.needs.all || combo.needs.all.every((p) => named.includes(p));
+    const hostOk = !combo.needs.hosts || (combo.needs.hosts === "broad" && broad);
+    if (anyOk && allOk && hostOk) {
+      out.push({ code: combo.code, score: combo.score, detail: combo.detail });
+    }
+  }
+  return out;
+}
+
+// hardcoded secrets — extensions ship their keys in the bundle constantly
+const SECRET_PATTERNS = [
+  { code: "SECRET_AWS_KEY", score: 30, detail: "hardcoded AWS access key",
+    re: /\bAKIA[0-9A-Z]{16}\b/ },
+  { code: "SECRET_GITHUB_TOKEN", score: 30, detail: "hardcoded GitHub token",
+    re: /\b(ghp|gho|github_pat)_[A-Za-z0-9_]{20,}\b/ },
+  { code: "SECRET_GOOGLE_KEY", score: 25, detail: "hardcoded Google API key",
+    re: /\bAIza[0-9A-Za-z\-_]{35}\b/ },
+  { code: "SECRET_PRIVATE_KEY", score: 35, detail: "private key bundled in the extension",
+    re: /-----BEGIN (RSA |EC |DSA )?PRIVATE KEY-----/ },
+  { code: "SECRET_GENERIC", score: 15, detail: "looks like a hardcoded api key/secret/token",
+    re: /\b(api[_-]?key|secret|passwd|password|auth[_-]?token)\b\s*[:=]\s*["'][A-Za-z0-9\-_]{16,}["']/i },
+];
+
+function checkHardcodedSecrets(files) {
+  const out = [];
+  const seen = new Set(); // one finding per pattern, don't spam
+  for (const f of files) {
+    for (const p of SECRET_PATTERNS) {
+      if (seen.has(p.code)) continue;
+      let hit = false;
+      try { hit = p.re.test(f.content || ""); } catch { hit = false; }
+      if (hit) {
+        seen.add(p.code);
+        out.push({ code: p.code, score: p.score, detail: `${p.detail} (first seen in ${f.name})` });
+      }
+    }
+  }
+  return out;
+}
+
+function checkWebAccessibleResources(manifest) {
+  const out = [];
+  const war = manifest.web_accessible_resources;
+  if (!war) return out;
+  if (manifest.manifest_version === 3 && Array.isArray(war)) {
+    for (const entry of war) {
+      const matches = (entry && entry.matches) || [];
+      const resources = (entry && entry.resources) || [];
+      if (matches.includes("<all_urls>") && resources.length) {
+        out.push({
+          code: "WAR_ALL_URLS",
+          score: 15,
+          detail: `${resources.length} resource(s) exposed to every site — fingerprintable, sometimes exploitable`,
+        });
+      }
+    }
+  } else if (Array.isArray(war) && war.length > 10) {
+    out.push({ code: "WAR_MANY", score: 10, detail: `${war.length} web-accessible resources — large exposed surface` });
+  }
+  return out;
+}
+
 module.exports = {
   checkPermissions,
   checkHostPermissions,
   checkContentScripts,
   checkCodeFiles,
   checkManifestMeta,
+  checkPermissionCombos,
+  checkHardcodedSecrets,
+  checkWebAccessibleResources,
   bandFor,
 };

@@ -99,9 +99,12 @@ function analyze(input) {
     const findings = [
       ...checks.checkManifestMeta(manifest),
       ...checks.checkPermissions(named),
+      ...checks.checkPermissionCombos(named, hosts),
       ...checks.checkHostPermissions(hosts),
       ...checks.checkContentScripts(manifest.content_scripts),
       ...checks.checkCodeFiles(files),
+      ...checks.checkHardcodedSecrets(files),
+      ...checks.checkWebAccessibleResources(manifest),
     ];
 
     findings.sort((a, b) => b.score - a.score);

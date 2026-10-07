@@ -93,6 +93,12 @@ What gets checked:
   before page load.
 - **Code patterns** — `eval()`, `new Function()`, remote `.js` references,
   `fetch()` piped into `innerHTML`, opaque WebAssembly blobs.
+- **Permission combos** — permissions that are fine alone but dangerous
+  together (traffic interception, data exfiltration, tab hijacking).
+- **Hardcoded secrets** — AWS keys, GitHub tokens, Google API keys, private
+  keys, and generic api_key/secret assignments sitting in the bundle.
+- **Web-accessible resources** — extension resources exposed to every site
+  (fingerprinting and injection surface).
 - **Manifest metadata** — manifest v2 (deprecated), custom `update_url`
   (self-updating outside the store), wide-open `externally_connectable`.
 

