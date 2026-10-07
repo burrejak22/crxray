@@ -15,7 +15,7 @@ their own extensions before shipping.
 ## Install
 
 ```bash
-npm install -g crxray
+npm install -g @burrejak22/crxray
 ```
 
 Or run from source:
